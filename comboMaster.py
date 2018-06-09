@@ -10,7 +10,7 @@ import argparse
 import subprocess
 import numpy as np
 import pandas as pd
-from sqlalchemy import create_engine
+#from sqlalchemy import create_engine
 
 
 class ComboMaster(object):
@@ -18,7 +18,10 @@ class ComboMaster(object):
 		## excel file path
 		self.path = os.getcwd()
 		self.fmlyDict = {}
-		
+		self.combDict = {}
+		self.finalDict = {}
+		self.scenario_fml_val = []
+
 		## credentials
 		self.hostname = 'localhost'
 		self.username = 'SA'
@@ -35,40 +38,24 @@ class ComboMaster(object):
 			self.target = sys.argv[1]
 
 
-	def combinations(self, tgt, data):
-		for i in range(len(data)):
-			new_tgt = copy.copy(tgt)
-			new_data = copy.copy(data)
-			new_tgt.append(data[i])
-			new_data = data[i+1:]
-			print new_tgt
-			self.combinations(new_tgt, new_data)
-
 
 	def readData(self):
 		''' read data from database to generate dict '''
-
 		logging.info("getting database connection ...")
 		con, cur = self.getConnection()
 
 		try:
 			logging.info("selecting records from database table ...")
-			sql = "SELECT * from combotbl1"
-			cur.execute(sql)
-			rows = cur.fetchall()
-			
-			for row in rows:
-				#print "row"
-				bus_dt = row[0]
-				fmly_id = row[1]
-				snebdt = row[2]
-				defi = row[3]
+			sql1 = "SELECT * from combotbl1"
+			sql2 = "SELECT * from combotbl2"
+			self.df1 = pd.read_sql(sql1, con)
+			self.df2 = pd.read_sql(sql2, con)
 
-				## creating dictionary of scenariodate & famlyid
-				self.fmlyDict.setdefault(snebdt, []).append(fmly_id)
+			#print self.df1
+			#print self.df2
+			for index, row in self.df1.iterrows():
+				self.fmlyDict.setdefault(row['scebdt'], []).append(row['fmly_id'])
 
-			# print "self.fmlyDict"
-			# print "self.fmlyDict.keys()""
 		except Exception as e:
 			logging.error("readData(), e: {}".format(e))
 		else:
@@ -76,11 +63,63 @@ class ComboMaster(object):
 			con.close()
 
 
+	def combinations(self, tgt, data, key):
+		for i in range(len(data)):
+			new_tgt = copy.copy(tgt)
+			new_data = copy.copy(data)
+			new_tgt.append(data[i])
+			new_data = data[i+1:]
+			#print new_tgt
+			self.combDict[tuple(new_tgt)] = key
+			self.combinations(new_tgt, new_data, key)
+
+
 	def createCombination(self):
 		''' function to create combination all fmly_id uniquely '''
 		try:
+			self.fdf = pd.DataFrame(columns=['fmly_comb', 'scebdt', 'total'])
+			
 			for key in self.fmlyDict.keys():
-				self.combinations([], self.fmlyDict[key])
+				self.combinations([], self.fmlyDict[key], key)
+				
+				for comb in self.combDict.keys():
+					total = 0
+					
+					for c in comb:
+						total += self.df1.loc[(self.df1['scebdt'] == key) & (self.df1['fmly_id'] == c), 'def'].iloc[0]
+
+					self.finalDict[comb] = {}
+					self.finalDict[comb][self.combDict[comb]] = total
+					self.fdf = self.fdf.append({'fmly_comb': comb, 'scebdt': self.df1['scebdt'].iloc[0], 'total': total}, ignore_index=True)
+					#print self.finalDict
+				
+				## get final data
+				self.getFinalData()
+
+			self.fdf['scenario_fml_val'] = self.scenario_fml_val
+			print self.fdf
+		except Exception as e:
+			logging.error("createCombination(), e: {}".format(e))
+
+
+	def getFinalData(self):
+		try:
+			## get total of fmlycfr column
+			total_cfr = self.df2['fmlycfr'].sum()
+
+			for key in self.finalDict.keys():
+				#print self.finalDict[key].keys()
+				value = total_cfr
+				for k in key:
+					#print k
+					#print self.df2.loc[k]['fmlycfr']
+					value -= self.df2.loc[self.df2['fmly_id'] == k, 'fmlycfr'].iloc[0]
+
+				for scen in self.finalDict[key].keys():
+					if value != 0:
+						self.scenario_fml_val.append(float(self.finalDict[key][scen])/value)
+					else:
+						self.scenario_fml_val.append(0)
 		except Exception as e:
 			logging.error("createCombination(), e: {}".format(e))
 
