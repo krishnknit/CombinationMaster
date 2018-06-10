@@ -21,6 +21,7 @@ class ComboMaster(object):
 		self.combDict = {}
 		self.finalDict = {}
 		self.scenario_fml_val = []
+		self.numbyden = []
 
 		## credentials
 		self.hostname = 'localhost'
@@ -77,7 +78,7 @@ class ComboMaster(object):
 	def createCombination(self):
 		''' function to create combination all fmly_id uniquely '''
 		try:
-			self.fdf = pd.DataFrame(columns=['fmly_comb', 'scebdt', 'total'])
+			self.fdf = pd.DataFrame(columns=['combfmlyid', 'scebdt', 'combtotal'])
 			
 			for key in self.fmlyDict.keys():
 				self.combinations([], self.fmlyDict[key], key)
@@ -90,19 +91,21 @@ class ComboMaster(object):
 
 					self.finalDict[comb] = {}
 					self.finalDict[comb][self.combDict[comb]] = total
-					self.fdf = self.fdf.append({'fmly_comb': comb, 'scebdt': self.df1['scebdt'].iloc[0], 'total': total}, ignore_index=True)
+					self.fdf = self.fdf.append({'combfmlyid': list(comb), 'scebdt': key, 'combtotal': total}, ignore_index=True)
 					#print self.finalDict
 				
-				## get final data
-				self.getFinalData()
+				## generate numerator/denomenator
+				self.generateNumbyDen()
 
 			self.fdf['scenario_fml_val'] = self.scenario_fml_val
-			print self.fdf
+			self.fdf['numbyden'] = self.numbyden
+			#print self.fdf
+			print self.fdf.loc[self.fdf['numbyden'] != 'na', ['combfmlyid', 'scebdt', 'numbyden']]
 		except Exception as e:
 			logging.error("createCombination(), e: {}".format(e))
 
 
-	def getFinalData(self):
+	def generateNumbyDen(self):
 		try:
 			## get total of fmlycfr column
 			total_cfr = self.df2['fmlycfr'].sum()
@@ -111,15 +114,20 @@ class ComboMaster(object):
 				#print self.finalDict[key].keys()
 				value = total_cfr
 				for k in key:
-					#print k
-					#print self.df2.loc[k]['fmlycfr']
 					value -= self.df2.loc[self.df2['fmly_id'] == k, 'fmlycfr'].iloc[0]
 
 				for scen in self.finalDict[key].keys():
 					if value != 0:
-						self.scenario_fml_val.append(float(self.finalDict[key][scen])/value)
+						result = float(self.finalDict[key][scen])/value
+						self.scenario_fml_val.append(result)
+
+						if result > float(self.target):
+							self.numbyden.append(result)
+						else:
+							self.numbyden.append('na')
 					else:
 						self.scenario_fml_val.append(0)
+						self.numbyden.append('na')
 		except Exception as e:
 			logging.error("createCombination(), e: {}".format(e))
 
@@ -149,7 +157,6 @@ class ComboMaster(object):
 		self.getargs()
 		self.readData()
 		self.createCombination()
-
 		etime = time.time()
 		ttime = etime - stime		
 		logging.info("********************************************************")
