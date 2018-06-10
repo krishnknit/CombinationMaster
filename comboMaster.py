@@ -3,35 +3,28 @@ import os
 import sys
 import time
 import copy
+import config
 import pymssql
 import logging
-import datetime
 import argparse
-import subprocess
 import numpy as np
 import pandas as pd
-#from sqlalchemy import create_engine
 
 
 class ComboMaster(object):
+
 	def __init__(self):
-		## excel file path
-		self.path = os.getcwd()
+		''' Initialise the class with required valiables '''
 		self.fmlyDict = {}
 		self.combDict = {}
 		self.finalDict = {}
 		self.scenario_fml_val = []
 		self.numbyden = []
 
-		## credentials
-		self.hostname = 'localhost'
-		self.username = 'SA'
-		self.password = 'cybage@123'
-		self.dbname   = 'TestDB'
-		self.port     = '1433'
-
 
 	def getargs(self):
+		''' Read passed command line arguments '''
+
 		if len (sys.argv) != 2 :
 			print ("Usage: python <SCRIPT_NAME> <TARGET> ")
 			sys.exit (1)
@@ -39,16 +32,18 @@ class ComboMaster(object):
 			self.target = sys.argv[1]
 
 
-
 	def readData(self):
 		''' read data from database to generate dict '''
+
 		logging.info("getting database connection ...")
 		con, cur = self.getConnection()
 
 		try:
 			logging.info("selecting records from database table ...")
+
 			sql1 = "SELECT * from combotbl1"
 			sql2 = "SELECT * from combotbl2"
+
 			self.df1 = pd.read_sql(sql1, con)
 			self.df2 = pd.read_sql(sql2, con)
 
@@ -65,6 +60,8 @@ class ComboMaster(object):
 
 
 	def combinations(self, tgt, data, key):
+		''' To get all the unique combination of familyid for same scenario date '''
+
 		for i in range(len(data)):
 			new_tgt = copy.copy(tgt)
 			new_data = copy.copy(data)
@@ -77,6 +74,7 @@ class ComboMaster(object):
 
 	def createCombination(self):
 		''' function to create combination all fmly_id uniquely '''
+
 		try:
 			self.fdf = pd.DataFrame(columns=['combfmlyid', 'scebdt', 'combtotal'])
 			
@@ -84,14 +82,14 @@ class ComboMaster(object):
 				self.combinations([], self.fmlyDict[key], key)
 				
 				for comb in self.combDict.keys():
-					total = 0
+					combtotal = 0
 					
 					for c in comb:
-						total += self.df1.loc[(self.df1['scebdt'] == key) & (self.df1['fmly_id'] == c), 'def'].iloc[0]
+						combtotal += self.df1.loc[(self.df1['scebdt'] == key) & (self.df1['fmly_id'] == c), 'def'].iloc[0]
 
 					self.finalDict[comb] = {}
-					self.finalDict[comb][self.combDict[comb]] = total
-					self.fdf = self.fdf.append({'combfmlyid': list(comb), 'scebdt': key, 'combtotal': total}, ignore_index=True)
+					self.finalDict[comb][self.combDict[comb]] = combtotal
+					self.fdf = self.fdf.append({'combfmlyid': list(comb), 'scebdt': key, 'combtotal': combtotal}, ignore_index=True)
 					#print self.finalDict
 				
 				## generate numerator/denomenator
@@ -106,6 +104,8 @@ class ComboMaster(object):
 
 
 	def generateNumbyDen(self):
+		''' To generate nunerator and denomenator combination '''
+
 		try:
 			## get total of fmlycfr column
 			total_cfr = self.df2['fmlycfr'].sum()
@@ -133,12 +133,14 @@ class ComboMaster(object):
 
 
 	def getConnection(self):
+		''' get database connection '''
+
 		con = pymssql.connect(
-					self.hostname,
-					self.username,
-					self.password,
-					self.dbname,
-					self.port)
+					config.DATABASE_CONFIG['hostname'],
+					config.DATABASE_CONFIG['username'],
+					config.DATABASE_CONFIG['password'],
+					config.DATABASE_CONFIG['dbname'],
+					config.DATABASE_CONFIG['port'])
 
 		cursor = con.cursor()
 
