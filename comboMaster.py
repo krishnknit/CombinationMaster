@@ -7,6 +7,7 @@ import config
 import pymssql
 import logging
 import argparse
+import datetime
 import numpy as np
 import pandas as pd
 
@@ -15,11 +16,14 @@ class ComboMaster(object):
 
 	def __init__(self):
 		''' Initialise the class with required valiables '''
+		self.csvPath = os.getcwd()
 		self.fmlyDict = {}
 		self.combDict = {}
 		self.finalDict = {}
 		self.scenario_fml_val = []
 		self.numbyden = []
+		self.comblen = []
+		self.combfilter = []
 
 
 	def getargs(self):
@@ -97,37 +101,98 @@ class ComboMaster(object):
 
 			self.fdf['scenario_fml_val'] = self.scenario_fml_val
 			self.fdf['numbyden'] = self.numbyden
-			#print self.fdf
-			print self.fdf.loc[self.fdf['numbyden'] != 'na', ['combfmlyid', 'scebdt', 'numbyden']]
+			self.fdf['combfilter'] = self.combfilter
+
+			finalDf =  self.fdf.loc[(self.fdf['numbyden'] != 'na') & (self.fdf['combfilter'] != 'na'), ['combfmlyid', 'scebdt', 'numbyden']]
+			#print finalDf
+			
+			self.generateCSVFile(finalDf)
 		except Exception as e:
 			logging.error("createCombination(), e: {}".format(e))
 
 
+	def generateCSVFile(self, finalDf):
+		''' generate final dataframe to csv file '''
+
+		today = datetime.date.today()
+		#print "TODAY: ", today
+		csvFile = 'combomaster_date.csv'
+		try:
+			file = os.path.join(self.csvPath, csvFile)
+			print "File: ", file
+			#if os.path.exists(file):
+			logging.info("creating csv file '{}' ...".format(csvFile))
+			excelDF = finalDf.to_csv(file, index=False)
+		except Exception as e:
+			logging.error("generateCSVFile(), e: {}".format(e))
+
+
 	def generateNumbyDen(self):
 		''' To generate nunerator and denomenator combination '''
-
+		
 		try:
 			## get total of fmlycfr column
 			total_cfr = self.df2['fmlycfr'].sum()
+			totalRows = len(self.df2.index)
+			localList = []
+			g = globals()
+
+			for l in range(1, totalRows):
+				g['L_{0}'.format(l)] = []
 
 			for key in self.finalDict.keys():
-				#print self.finalDict[key].keys()
 				value = total_cfr
 				for k in key:
 					value -= self.df2.loc[self.df2['fmly_id'] == k, 'fmlycfr'].iloc[0]
 
 				for scen in self.finalDict[key].keys():
+					#print self.finalDict[key]
+					#print scen
 					if value != 0:
 						result = float(self.finalDict[key][scen])/value
 						self.scenario_fml_val.append(result)
 
 						if result > float(self.target):
 							self.numbyden.append(result)
+							self.comblen.append({key: result})
+							localList.append({key: result})
+							for l in range(1, totalRows):
+								if len(key) == l:
+									globals()['L_' + str(l)].append(key)
 						else:
 							self.numbyden.append('na')
+							self.comblen.append({key: 'na'})
+							localList.append({key: result})
 					else:
 						self.scenario_fml_val.append(0)
 						self.numbyden.append('na')
+						self.comblen.append({key: 'na'})
+						localList.append({key: result})
+
+			combDF = pd.DataFrame(columns=['comb', 'totalval'])
+
+			## create only dataframe whose cfrdefs more than passed target
+			for l in range(1, totalRows): 
+				if len(globals()['L_' + str(l)]) != 0:
+					for comblist in self.comblen:
+						for c in comblist.keys():
+							if comblist[c] != 'na':
+								combDF = combDF.append({'comb': c, 'totalval': comblist[c]}, ignore_index=True)
+
+			minVal = combDF.min()['totalval']
+			copycomblen = [ i for i in range(0, len(localList)) ]
+			cnt = 0
+
+			## find the closest cfr defs
+			for comblist in localList:
+				for c in comblist.keys():
+					if comblist[c] != minVal:
+						copycomblen[cnt] = 'na'
+					else:
+						copycomblen[cnt] = 'yes'
+				cnt += 1
+
+			self.combfilter.extend(copycomblen)
 		except Exception as e:
 			logging.error("createCombination(), e: {}".format(e))
 
