@@ -10,6 +10,7 @@ import argparse
 import datetime
 import numpy as np
 import pandas as pd
+from itertools import combinations
 
 
 class ComboMaster(object):
@@ -66,14 +67,11 @@ class ComboMaster(object):
 	def combinations(self, tgt, data, key):
 		''' To get all the unique combination of familyid for same scenario date '''
 
-		for i in range(len(data)):
-			new_tgt = copy.copy(tgt)
-			new_data = copy.copy(data)
-			new_tgt.append(data[i])
-			new_data = data[i+1:]
-			#print new_tgt
-			self.combDict[tuple(new_tgt)] = key
-			self.combinations(new_tgt, new_data, key)
+		if len(data) <= 10:
+			for i in range(len(data)):
+				comb = combinations([1, 2, 3], 2)
+				for c in list(comb):
+					self.combDict[tuple(c)] = key
 
 
 	def createCombination(self):
@@ -104,7 +102,7 @@ class ComboMaster(object):
 			self.fdf['combfilter'] = self.combfilter
 
 			finalDf =  self.fdf.loc[(self.fdf['numbyden'] != 'na') & (self.fdf['combfilter'] != 'na'), ['combfmlyid', 'scebdt', 'numbyden']]
-			#print finalDf
+			print finalDf
 			
 			self.generateCSVFile(finalDf)
 		except Exception as e:
@@ -115,13 +113,12 @@ class ComboMaster(object):
 		''' generate final dataframe to csv file '''
 
 		today = datetime.date.today()
+		today = today.strftime("%Y-%m-%d")
 		#print "TODAY: ", today
-		csvFile = 'combomaster_date.csv'
+		csvFile = 'combomaster_'+today+'.csv'
 		try:
 			file = os.path.join(self.csvPath, csvFile)
-			print "File: ", file
-			#if os.path.exists(file):
-			logging.info("creating csv file '{}' ...".format(csvFile))
+			logging.info("creating csv file '{}' ...".format(file))
 			excelDF = finalDf.to_csv(file, index=False)
 		except Exception as e:
 			logging.error("generateCSVFile(), e: {}".format(e))
@@ -158,7 +155,7 @@ class ComboMaster(object):
 							localList.append({key: result})
 							for l in range(1, totalRows):
 								if len(key) == l:
-									globals()['L_' + str(l)].append(key)
+									g['L_' + str(l)].append(key)
 						else:
 							self.numbyden.append('na')
 							self.comblen.append({key: 'na'})
@@ -170,6 +167,7 @@ class ComboMaster(object):
 						localList.append({key: result})
 
 			combDF = pd.DataFrame(columns=['comb', 'totalval'])
+			#print "LocalList: ", localList
 
 			## create only dataframe whose cfrdefs more than passed target
 			for l in range(1, totalRows): 
