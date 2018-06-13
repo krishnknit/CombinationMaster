@@ -69,7 +69,7 @@ class ComboMaster(object):
 
 		if len(data) <= 10:
 			for i in range(len(data)):
-				comb = combinations([1, 2, 3], 2)
+				comb = combinations(data, i)
 				for c in list(comb):
 					self.combDict[tuple(c)] = key
 
