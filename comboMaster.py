@@ -171,7 +171,7 @@ class ComboMaster(object):
 
 			## create only dataframe whose cfrdefs more than passed target
 			for l in range(1, totalRows): 
-				if len(globals()['L_' + str(l)]) != 0:
+				if len(g['L_' + str(l)]) != 0:
 					for comblist in self.comblen:
 						for c in comblist.keys():
 							if comblist[c] != 'na':
