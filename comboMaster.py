@@ -17,6 +17,7 @@ class ComboMaster(object):
 
 	def __init__(self):
 		''' Initialise the class with required valiables '''
+		self.finalCombMinDF = pd.DataFrame(columns=['combfmlyid', 'scebdt', 'numbyden'])
 		self.csvPath = os.getcwd()
 		self.fmlyDict = {}
 		self.combDict = {}
@@ -24,7 +25,6 @@ class ComboMaster(object):
 		self.scenario_fml_val = []
 		self.numbyden = []
 		self.comblen = []
-		self.combfilter = []
 
 
 	def getargs(self):
@@ -99,27 +99,55 @@ class ComboMaster(object):
 
 			self.fdf['scenario_fml_val'] = self.scenario_fml_val
 			self.fdf['numbyden'] = self.numbyden
-			self.fdf['combfilter'] = self.combfilter
+			self.fdf['comblen'] = self.comblen
 
-			finalDf =  self.fdf.loc[(self.fdf['numbyden'] != 'na') & (self.fdf['combfilter'] != 'na'), ['combfmlyid', 'scebdt', 'numbyden']]
-			print finalDf
+			#finalDf =  self.fdf.loc[(self.fdf['numbyden'] != 'na') & (self.fdf['combfilter'] != 'na'), ['combfmlyid', 'scebdt', 'numbyden']]
+			finalDf =  self.fdf.loc[(self.fdf['numbyden'] != 'na'), ['combfmlyid', 'scebdt', 'numbyden', 'comblen']]
+			#print finalDf
 			
-			self.generateCSVFile(finalDf)
+			self.generateMinComb(finalDf)
+			self.generateCSVFile()
 		except Exception as e:
 			logging.error("createCombination(), e: {}".format(e))
 
 
-	def generateCSVFile(self, finalDf):
+	def generateMinComb(self, finalDf):
+		try:
+			grouped = finalDf.groupby('scebdt')
+			for name, group in grouped:
+				combMinDF = pd.DataFrame(columns=['combfmlyid', 'scebdt', 'numbyden', 'comblen'])
+				for index, row in finalDf.iterrows():
+					if row['scebdt'] == name:
+						combMinDF = combMinDF.append({'combfmlyid': row['combfmlyid'], 'scebdt': row['scebdt'], 'numbyden': row['numbyden'], 'comblen': row['comblen']}, ignore_index=True)
+				
+				gd = combMinDF.groupby('comblen')
+				cnt = 0
+				for n, g in gd:
+				# 	print n
+					minn = g.min()['numbyden']
+					for i, r in finalDf.iterrows():
+						if r['numbyden'] == minn:
+							self.finalCombMinDF = self.finalCombMinDF.append({'combfmlyid': r['combfmlyid'], 'scebdt': r['scebdt'], 'numbyden': r['numbyden']}, ignore_index=True)
+					cnt += 1
+					if cnt == 1:
+						break
+		except Exception as e:
+			logging.error("generateMinComb(), e: {}".format(e))
+
+
+	def generateCSVFile(self):
 		''' generate final dataframe to csv file '''
 
 		today = datetime.date.today()
 		today = today.strftime("%Y-%m-%d")
 		#print "TODAY: ", today
+		#print self.finalCombMinDF
+
 		csvFile = 'combomaster_'+today+'.csv'
 		try:
 			file = os.path.join(self.csvPath, csvFile)
 			logging.info("creating csv file '{}' ...".format(file))
-			excelDF = finalDf.to_csv(file, index=False)
+			excelDF = self.finalCombMinDF.to_csv(file, index=False)
 		except Exception as e:
 			logging.error("generateCSVFile(), e: {}".format(e))
 
@@ -130,13 +158,7 @@ class ComboMaster(object):
 		try:
 			## get total of fmlycfr column
 			total_cfr = self.df2['fmlycfr'].sum()
-			totalRows = len(self.df2.index)
-			localList = []
-			g = globals()
-
-			for l in range(1, totalRows):
-				g['L_{0}'.format(l)] = []
-
+			
 			for key in self.finalDict.keys():
 				value = total_cfr
 				for k in key:
@@ -151,46 +173,14 @@ class ComboMaster(object):
 
 						if result > float(self.target):
 							self.numbyden.append(result)
-							self.comblen.append({key: result})
-							localList.append({key: result})
-							for l in range(1, totalRows):
-								if len(key) == l:
-									g['L_' + str(l)].append(key)
+							self.comblen.append(len(key))
 						else:
 							self.numbyden.append('na')
-							self.comblen.append({key: 'na'})
-							localList.append({key: result})
+							self.comblen.append(len(key))
 					else:
 						self.scenario_fml_val.append(0)
 						self.numbyden.append('na')
-						self.comblen.append({key: 'na'})
-						localList.append({key: result})
-
-			combDF = pd.DataFrame(columns=['comb', 'totalval'])
-			#print "LocalList: ", localList
-
-			## create only dataframe whose cfrdefs more than passed target
-			for l in range(1, totalRows): 
-				if len(g['L_' + str(l)]) != 0:
-					for comblist in self.comblen:
-						for c in comblist.keys():
-							if comblist[c] != 'na':
-								combDF = combDF.append({'comb': c, 'totalval': comblist[c]}, ignore_index=True)
-
-			minVal = combDF.min()['totalval']
-			copycomblen = [ i for i in range(0, len(localList)) ]
-			cnt = 0
-
-			## find the closest cfr defs
-			for comblist in localList:
-				for c in comblist.keys():
-					if comblist[c] != minVal:
-						copycomblen[cnt] = 'na'
-					else:
-						copycomblen[cnt] = 'yes'
-				cnt += 1
-
-			self.combfilter.extend(copycomblen)
+						self.comblen.append(len(key))
 		except Exception as e:
 			logging.error("createCombination(), e: {}".format(e))
 
