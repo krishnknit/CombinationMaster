@@ -8,7 +8,8 @@ import pymssql
 import logging
 import argparse
 import datetime
-import numpy as np
+import threading
+#import numpy as np
 import pandas as pd
 from itertools import combinations
 
@@ -67,11 +68,10 @@ class ComboMaster(object):
 	def combinations(self, tgt, data, key):
 		''' To get all the unique combination of familyid for same scenario date '''
 
-		if len(data) <= 10:
-			for i in range(len(data)):
-				comb = combinations(data, i)
-				for c in list(comb):
-					self.combDict[tuple(c)] = key
+		for i in range(1,8):
+			comb = combinations(data, i)
+			for c in list(comb):
+				self.combDict[tuple(c)] = key
 
 
 	def createCombination(self):
@@ -87,8 +87,11 @@ class ComboMaster(object):
 					combtotal = 0
 					
 					for c in comb:
-						combtotal += self.df1.loc[(self.df1['scebdt'] == key) & (self.df1['fmly_id'] == c), 'def'].iloc[0]
-
+						compVal = self.df1.loc[(self.df1['scebdt'] == key) & (self.df1['fmly_id'] == c), 'def']
+						if compVal.empty:
+							continue
+						combtotal += compVal.iloc[0]
+					
 					self.finalDict[comb] = {}
 					self.finalDict[comb][self.combDict[comb]] = combtotal
 					self.fdf = self.fdf.append({'combfmlyid': list(comb), 'scebdt': key, 'combtotal': combtotal}, ignore_index=True)
@@ -101,6 +104,7 @@ class ComboMaster(object):
 			self.fdf['numbyden'] = self.numbyden
 			self.fdf['comblen'] = self.comblen
 
+			#print self.fdf
 			#finalDf =  self.fdf.loc[(self.fdf['numbyden'] != 'na') & (self.fdf['combfilter'] != 'na'), ['combfmlyid', 'scebdt', 'numbyden']]
 			finalDf =  self.fdf.loc[(self.fdf['numbyden'] != 'na'), ['combfmlyid', 'scebdt', 'numbyden', 'comblen']]
 			#print finalDf
