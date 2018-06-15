@@ -74,10 +74,10 @@ class ComboMaster(object):
 		lock.release()
 
 
-	def createComb(self, c, data, key):
-		comb = combinations([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], c)
-		for cc in list(comb):
-			self.combDict[tuple(cc)] = key
+	# def createComb(self, c, data, key):
+	# 	comb = combinations([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], c)
+	# 	for cc in list(comb):
+	# 		self.combDict[tuple(cc)] = key
 
 
 	def getCombinations(self, tgt, data, key):
@@ -105,7 +105,7 @@ class ComboMaster(object):
 			
 			for key in self.fmlyDict.keys():
 				self.getCombinations([], self.fmlyDict[key], key)
-				print self.combDict
+				#print self.combDict
 				
 				for comb in self.combDict.keys():
 					combtotal = 0
