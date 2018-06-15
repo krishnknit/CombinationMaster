@@ -65,13 +65,36 @@ class ComboMaster(object):
 			con.close()
 
 
-	def combinations(self, tgt, data, key):
+	def threadTask(self, lock, tNum, data, key):
+		lock.acquire()
+		#self.createComb(c, data, key)
+		comb = combinations(data, tNum)
+		for cc in list(comb):
+			self.combDict[tuple(cc)] = key
+		lock.release()
+
+
+	def createComb(self, c, data, key):
+		comb = combinations([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], c)
+		for cc in list(comb):
+			self.combDict[tuple(cc)] = key
+
+
+	def getCombinations(self, tgt, data, key):
 		''' To get all the unique combination of familyid for same scenario date '''
 
-		for i in range(1,8):
-			comb = combinations(data, i)
-			for c in list(comb):
-				self.combDict[tuple(c)] = key
+		lock = threading.Lock()
+
+		t1 = threading.Thread(target=self.threadTask, args = (lock, 1, data, key))
+		t2 = threading.Thread(target=self.threadTask, args = (lock, 2, data, key))
+
+		## start thread
+		t1.start()
+		t2.start()
+
+		## wait for each to be completed
+		t1.join()
+		t2.join()
 
 
 	def createCombination(self):
@@ -81,7 +104,8 @@ class ComboMaster(object):
 			self.fdf = pd.DataFrame(columns=['combfmlyid', 'scebdt', 'combtotal'])
 			
 			for key in self.fmlyDict.keys():
-				self.combinations([], self.fmlyDict[key], key)
+				self.getCombinations([], self.fmlyDict[key], key)
+				print self.combDict
 				
 				for comb in self.combDict.keys():
 					combtotal = 0
