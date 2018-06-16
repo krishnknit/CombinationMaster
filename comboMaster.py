@@ -26,6 +26,7 @@ class ComboMaster(object):
 		self.scenario_fml_val = []
 		self.numbyden = []
 		self.comblen = []
+		self.calTotal = []
 
 
 	def getargs(self):
@@ -51,8 +52,9 @@ class ComboMaster(object):
 			sql2 = "SELECT * from combotbl2"
 
 			self.df1 = pd.read_sql(sql1, con)
+			self.df1 = self.df1.loc[(self.df1['def'] != 0)]
 			self.df2 = pd.read_sql(sql2, con)
-
+			
 			#print self.df1
 			#print self.df2
 			for index, row in self.df1.iterrows():
@@ -67,17 +69,32 @@ class ComboMaster(object):
 
 	def threadTask(self, lock, tNum, data, key):
 		lock.acquire()
-		#self.createComb(c, data, key)
-		comb = combinations(data, tNum)
-		for cc in list(comb):
-			self.combDict[tuple(cc)] = key
+		for c in range(1,8):
+			self.createComb(c, data, key)
+			# comb = combinations(data, tNum)
+			# for cc in list(comb):
+			# 	self.combDict[tuple(cc)] = key
 		lock.release()
 
 
-	# def createComb(self, c, data, key):
-	# 	comb = combinations([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], c)
-	# 	for cc in list(comb):
-	# 		self.combDict[tuple(cc)] = key
+	def createComb(self, c, data, key):
+		comb = combinations(data, c)
+		for cc in list(comb):
+			combtotal = 0
+			for c in cc:
+				compVal = self.df1.loc[ (self.df1['scebdt'] == key) & 
+										(self.df1['fmly_id'] == c), 
+										'def']
+				if compVal.empty:
+					continue
+				combtotal += compVal.iloc[0]
+			#self.finalDict[cc] = {}
+			#self.finalDict[cc][key] = combtotal
+			self.fdf = self.fdf.append({'combfmlyid': list(cc), 
+										'scebdt': key, 
+										'combtotal': combtotal}, ignore_index=True)
+
+			#print "combtotal: ", combtotal
 
 
 	def getCombinations(self, tgt, data, key):
@@ -86,15 +103,15 @@ class ComboMaster(object):
 		lock = threading.Lock()
 
 		t1 = threading.Thread(target=self.threadTask, args = (lock, 1, data, key))
-		t2 = threading.Thread(target=self.threadTask, args = (lock, 2, data, key))
+		#t2 = threading.Thread(target=self.threadTask, args = (lock, 2, data, key))
 
 		## start thread
 		t1.start()
-		t2.start()
+		#t2.start()
 
 		## wait for each to be completed
 		t1.join()
-		t2.join()
+		#t2.join()
 
 
 	def createCombination(self):
@@ -105,25 +122,10 @@ class ComboMaster(object):
 			
 			for key in self.fmlyDict.keys():
 				self.getCombinations([], self.fmlyDict[key], key)
-				#print self.combDict
-				
-				for comb in self.combDict.keys():
-					combtotal = 0
-					
-					for c in comb:
-						compVal = self.df1.loc[(self.df1['scebdt'] == key) & (self.df1['fmly_id'] == c), 'def']
-						if compVal.empty:
-							continue
-						combtotal += compVal.iloc[0]
-					
-					self.finalDict[comb] = {}
-					self.finalDict[comb][self.combDict[comb]] = combtotal
-					self.fdf = self.fdf.append({'combfmlyid': list(comb), 'scebdt': key, 'combtotal': combtotal}, ignore_index=True)
-					#print self.finalDict
-				
-				## generate numerator/denomenator
-				self.generateNumbyDen()
 
+			## generate numerator/denomenator
+			self.generateNumbyDen()
+			#print self.fdf
 			self.fdf['scenario_fml_val'] = self.scenario_fml_val
 			self.fdf['numbyden'] = self.numbyden
 			self.fdf['comblen'] = self.comblen
@@ -186,31 +188,28 @@ class ComboMaster(object):
 		try:
 			## get total of fmlycfr column
 			total_cfr = self.df2['fmlycfr'].sum()
-			
-			for key in self.finalDict.keys():
+
+			for index, row in self.fdf.iterrows():
 				value = total_cfr
-				for k in key:
+				for k in row['combfmlyid']:				
 					value -= self.df2.loc[self.df2['fmly_id'] == k, 'fmlycfr'].iloc[0]
 
-				for scen in self.finalDict[key].keys():
-					#print self.finalDict[key]
-					#print scen
-					if value != 0:
-						result = float(self.finalDict[key][scen])/value
-						self.scenario_fml_val.append(result)
+				if value != 0:
+					result = float(row['combtotal'])/value
+					self.scenario_fml_val.append(result)
 
-						if result > float(self.target):
-							self.numbyden.append(result)
-							self.comblen.append(len(key))
-						else:
-							self.numbyden.append('na')
-							self.comblen.append(len(key))
+					if result > float(self.target):
+						self.numbyden.append(result)
+						self.comblen.append(len(row['combfmlyid']))
 					else:
-						self.scenario_fml_val.append(0)
 						self.numbyden.append('na')
-						self.comblen.append(len(key))
+						self.comblen.append(len(row['combfmlyid']))
+				else:
+					self.scenario_fml_val.append(0)
+					self.numbyden.append('na')
+					self.comblen.append(len(row['combfmlyid']))
 		except Exception as e:
-			logging.error("createCombination(), e: {}".format(e))
+			logging.error("generateNumbyDen(), e: {}".format(e))
 
 
 	def getConnection(self):
