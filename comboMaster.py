@@ -67,51 +67,26 @@ class ComboMaster(object):
 			con.close()
 
 
-	def threadTask(self, lock, tNum, data, key):
-		lock.acquire()
-		for c in range(1,8):
-			self.createComb(c, data, key)
-			# comb = combinations(data, tNum)
-			# for cc in list(comb):
-			# 	self.combDict[tuple(cc)] = key
-		lock.release()
-
-
-	def createComb(self, c, data, key):
-		comb = combinations(data, c)
-		for cc in list(comb):
-			combtotal = 0
-			for c in cc:
-				compVal = self.df1.loc[ (self.df1['scebdt'] == key) & 
-										(self.df1['fmly_id'] == c), 
-										'def']
-				if compVal.empty:
-					continue
-				combtotal += compVal.iloc[0]
-			#self.finalDict[cc] = {}
-			#self.finalDict[cc][key] = combtotal
-			self.fdf = self.fdf.append({'combfmlyid': list(cc), 
-										'scebdt': key, 
-										'combtotal': combtotal}, ignore_index=True)
-
-			#print "combtotal: ", combtotal
-
-
-	def getCombinations(self, tgt, data, key):
-		''' To get all the unique combination of familyid for same scenario date '''
-
-		lock = threading.Lock()
-
-		t1 = threading.Thread(target=self.threadTask, args = (lock, 1, data, key))
-		#t2 = threading.Thread(target=self.threadTask, args = (lock, 2, data, key))
-
-		## start thread
-		t1.start()
-		#t2.start()
-
-		## wait for each to be completed
-		t1.join()
-		#t2.join()
+	def getCombinations(self, data, key):
+		try:
+			for c in range(1,5):
+				comb = combinations(data, c)
+				for cc in list(comb):
+					combtotal = 0
+					for c in cc:
+						compVal = self.df1.loc[ 
+									(self.df1['scebdt'] == key) & 
+									(self.df1['fmly_id'] == c), 
+									'def']
+						if compVal.empty:
+							continue
+						combtotal += compVal.iloc[0]
+					self.fdf = self.fdf.append(
+									{'combfmlyid': list(cc), 
+									'scebdt': key, 
+									'combtotal': combtotal}, ignore_index=True)
+		except Exception as e:
+			logging.error("getCombinations(), e: {}".format(e))
 
 
 	def createCombination(self):
@@ -121,7 +96,7 @@ class ComboMaster(object):
 			self.fdf = pd.DataFrame(columns=['combfmlyid', 'scebdt', 'combtotal'])
 			
 			for key in self.fmlyDict.keys():
-				self.getCombinations([], self.fmlyDict[key], key)
+				self.getCombinations(self.fmlyDict[key], key)
 
 			## generate numerator/denomenator
 			self.generateNumbyDen()
