@@ -9,7 +9,6 @@ import logging
 import argparse
 import datetime
 import threading
-#import numpy as np
 import pandas as pd
 from itertools import combinations
 
@@ -26,7 +25,6 @@ class ComboMaster(object):
 		self.scenario_fml_val = []
 		self.numbyden = []
 		self.comblen = []
-		self.calTotal = []
 
 
 	def getargs(self):
