@@ -25,6 +25,7 @@ class ComboMaster(object):
 		self.scenario_fml_val = []
 		self.numbyden = []
 		self.comblen = []
+		self.keyCounts = 0
 
 
 	def getargs(self):
@@ -65,24 +66,23 @@ class ComboMaster(object):
 			con.close()
 
 
-	def getCombinations(self, data, key):
+	def getCombinations(self, data, key, kcnt):
 		try:
-			for c in range(1,5):
-				comb = combinations(data, c)
-				for cc in list(comb):
-					combtotal = 0
-					for c in cc:
-						compVal = self.df1.loc[ 
-									(self.df1['scebdt'] == key) & 
-									(self.df1['fmly_id'] == c), 
-									'def']
-						if compVal.empty:
-							continue
-						combtotal += compVal.iloc[0]
-					self.fdf = self.fdf.append(
-									{'combfmlyid': list(cc), 
-									'scebdt': key, 
-									'combtotal': combtotal}, ignore_index=True)
+			comb = combinations(data, kcnt)
+			for cc in list(comb):
+				combtotal = 0
+				for c in cc:
+					compVal = self.df1.loc[ 
+								(self.df1['scebdt'] == key) & 
+								(self.df1['fmly_id'] == c), 
+								'def']
+					if compVal.empty:
+						continue
+					combtotal += compVal.iloc[0]
+				self.fdf = self.fdf.append(
+								{'combfmlyid': list(cc), 
+								'scebdt': key, 
+								'combtotal': combtotal}, ignore_index=True)
 		except Exception as e:
 			logging.error("getCombinations(), e: {}".format(e))
 
@@ -92,9 +92,12 @@ class ComboMaster(object):
 
 		try:
 			self.fdf = pd.DataFrame(columns=['combfmlyid', 'scebdt', 'combtotal'])
+			self.reducedDF = pd.DataFrame(columns=['combfmlyid', 'scenarioDate', 'cover1', 'calcVal'])
+			
 			
 			for key in self.fmlyDict.keys():
-				self.getCombinations(self.fmlyDict[key], key)
+				keyCounts = self.getReducedFmlyIds(self.fmlyDict[key], key)
+				self.getCombinations(self.fmlyDict[key], key, keyCounts)
 
 			## generate numerator/denomenator
 			self.generateNumbyDen()
@@ -112,6 +115,45 @@ class ComboMaster(object):
 			self.generateCSVFile()
 		except Exception as e:
 			logging.error("createCombination(), e: {}".format(e))
+
+
+	def getReducedFmlyIds(self, fmlyIds, sdate):
+		try:
+			tfid = []
+			total_cfr = self.df2['fmlycfr'].sum()
+			
+			for fid in fmlyIds:
+				cover = 0
+				numer = 0
+				denom = total_cfr
+				tfid.append(fid)
+
+				for index, row in self.df1.iterrows():
+					if fid == row['fmly_id']:
+						cover = row['cover1']
+				
+				for i in tfid:
+					numer += self.df1.loc[self.df1['fmly_id'] == i, 'def'].iloc[0]
+					denom -= self.df2.loc[self.df2['fmly_id'] == i, 'fmlycfr'].iloc[0]
+
+				if denom != 0:
+					numbyden = float(numer)/denom
+
+				self.reducedDF = self.reducedDF.append(
+										{'combfmlyid': tuple(tfid), 
+										'scenarioDate': sdate, 
+										'cover1': cover,
+										'calcVal': numbyden}, ignore_index=True)
+			
+			#print self.reducedDF
+			for indx, r in self.reducedDF.iterrows():
+				if self.target >= r['calcVal']:
+					self.keyCounts = len(r['combfmlyid'])
+
+			#print "keyCounts: ", self.keyCounts
+			return self.keyCounts
+		except Exception as e:
+			logging.error("getReducedFmlyIds(), e: {}".format(e))
 
 
 	def generateMinComb(self, finalDf):
