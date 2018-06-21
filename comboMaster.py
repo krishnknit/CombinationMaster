@@ -66,23 +66,62 @@ class ComboMaster(object):
 			con.close()
 
 
-	def getCombinations(self, data, key, kcnt):
+	def generateComb(self, data, kcnt):
+		comb = combinations(data, kcnt)
+		for cc in comb:
+			yield cc
+
+	def newGetCombinations(self, data, key, kcnt):
+		''' get the combinations for correct data '''
 		try:
-			comb = combinations(data, kcnt)
-			for cc in list(comb):
-				combtotal = 0
+			total_cfr = self.df2['fmly_cfr'].sum()
+			genObj = self.generateComb(data, kcnt)
+			for cc in genObj:
+				combtotal_def = 0
+				combtotal_cfr = total_cfr
 				for c in cc:
-					compVal = self.df1.loc[ 
+					compVal = self.df3.loc[(self.df3['scebdt'] == key) & (self.df3['fmly_id'] == c), 'def']
+					if compVal.empty:
+						continue
+					combtotal_def += compVal.iloc[0, 0]
+					combtotal_cfr -= compVal.iloc[0, 1]
+
+				if combtotal_cfr != 0:
+					numbyden = float(row['combtotal_def'])/combtotal_cfr
+
+				if numbyden - self.target < 0.01:
+					self.fdf = self.fdf.append(
+								{'combfmlyid': list(cc), 
+								'scebdt': key, 
+								'combtotal_def': combtotal_def,
+								'combtotal_cfr': combtotal_cfr}, ignore_index=True)
+
+				if len(self.fdf) >= 5:
+					break
+		except Exception as e:
+			logging.error("newGetCombinations(), e: {}".format(e))
+
+
+	def getCombinations(self, data, key, kcnt):
+		''' get the combinations for correct data '''
+		try:
+			combtotal = 0
+			genObj = self.generateComb(data, kcnt)
+			for cc in genObj:
+				for c in cc:
+					compVal = self.df1.loc[
 								(self.df1['scebdt'] == key) & 
 								(self.df1['fmly_id'] == c), 
 								'def']
 					if compVal.empty:
 						continue
 					combtotal += compVal.iloc[0]
+				
 				self.fdf = self.fdf.append(
 								{'combfmlyid': list(cc), 
 								'scebdt': key, 
 								'combtotal': combtotal}, ignore_index=True)
+
 		except Exception as e:
 			logging.error("getCombinations(), e: {}".format(e))
 
@@ -97,7 +136,7 @@ class ComboMaster(object):
 			
 			for key in self.fmlyDict.keys():
 				keyCounts = self.getReducedFmlyIds(self.fmlyDict[key], key)
-				self.getCombinations(self.fmlyDict[key], key, keyCounts)
+				self.newGetCombinations(self.fmlyDict[key], key, keyCounts)
 
 			## generate numerator/denomenator
 			self.generateNumbyDen()
