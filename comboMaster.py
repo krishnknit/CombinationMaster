@@ -96,7 +96,7 @@ class ComboMaster(object):
 								'combtotal_def': combtotal_def,
 								'combtotal_cfr': combtotal_cfr}, ignore_index=True)
 
-				if len(self.fdf) >= 5:
+				if len(self.fdf.index) >= 5:
 					break
 		except Exception as e:
 			logging.error("newGetCombinations(), e: {}".format(e))
