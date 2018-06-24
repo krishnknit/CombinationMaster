@@ -17,7 +17,7 @@ class ComboMaster(object):
 
 	def __init__(self):
 		''' Initialise the class with required valiables '''
-		self.finalCombMinDF = pd.DataFrame(columns=['combfmlyid', 'scebdt', 'numbyden'])
+		self.finalCombMinDF = pd.DataFrame(columns=['combfmlyid', 'scenario_dt', 'numbyden'])
 		self.csvPath = os.getcwd()
 		self.fmlyDict = {}
 		self.combDict = {}
@@ -46,24 +46,44 @@ class ComboMaster(object):
 
 		try:
 			logging.info("selecting records from database table ...")
+			datelist = pd.date_range(pd.datetime.today(), periods=10).tolist()
 
-			sql1 = "SELECT * from combotbl1"
-			sql2 = "SELECT * from combotbl2"
+			for business_dt in datelist:
+				sqlstr_1 = '''SELECT a.bus_dt, a.fmly_id, scenario_dt, defcny_no_offset, cover1, b.fmly_cfr 
+							  FROM dbo.g_cover1 a, dbo.g_fmily_cfr b
+							  WHERE a.bus_dt = '{}' 
+							  AND a.bus_dt = b.bus_dt 
+							  AND a.fmly_id = b.fmly_id 
+							  AND defcny_no_offset > 0 
+							  ORDER BY scenario_dt ASC, cover1 DESC'''.format(business_dt)
 
-			self.df1 = pd.read_sql(sql1, con)
-			self.df1 = self.df1.loc[(self.df1['def'] != 0)]
-			self.df2 = pd.read_sql(sql2, con)
-			
-			#print self.df1
-			#print self.df2
-			for index, row in self.df1.iterrows():
-				self.fmlyDict.setdefault(row['scebdt'], []).append(row['fmly_id'])
+				self.df1 = pd.read_sql(sqlstr_1, con)
+				self.df1.sort_values(['scenario_dt', 'cover1'], ascending=[True, False])
+				self.df3 = self.df1
+
+				sqlstr_2 = '''SELECT * FROM CWA_FICC_ST_P, dbo.gsd_family_cfr 
+							  WHERE bus_dt = '{}' '''.format(business_dt)
+				
+				self.df2 = pd.read_sql(sqlstr_2, con)
+				#print self.df1
+				#print self.df2
+				for index, row in self.df1.iterrows():
+					self.fmlyDict.setdefault(row['scenario_dt'], []).append(row['fmly_id'])
 
 		except Exception as e:
 			logging.error("readData(), e: {}".format(e))
 		else:
 			## close database connection
 			con.close()
+			self.finalCombMinDF = pd.DataFrame(columns=['combfmlyid', 'scenario_dt', 'numbyden'])
+			self.fmlyDict = {}
+			self.combDict = {}
+			self.finalDict = {}
+			self.scenario_fml_val = []
+			self.numbyden = []
+			self.comblen = []
+			self.keyCounts = 0
+			self.createCombination()
 
 
 	def generateComb(self, data, kcnt):
@@ -74,29 +94,33 @@ class ComboMaster(object):
 	def newGetCombinations(self, data, key, kcnt):
 		''' get the combinations for correct data '''
 		try:
+			fdf_temp = pd.DataFrame(columns=['fmly_comb', 'scenario_dt', 'combtotal_def', 'combtotal_cfr', 'covern'])
 			total_cfr = self.df2['fmly_cfr'].sum()
 			genObj = self.generateComb(data, kcnt)
 			for cc in genObj:
 				combtotal_def = 0
 				combtotal_cfr = total_cfr
+				covern = 0.0
 				for c in cc:
-					compVal = self.df3.loc[(self.df3['scebdt'] == key) & (self.df3['fmly_id'] == c), 'def']
+					compVal = self.df3.loc[(self.df3['scenario_dt'] == key) & (self.df3['fmly_id'] == c), 'def']
 					if compVal.empty:
 						continue
 					combtotal_def += compVal.iloc[0, 0]
 					combtotal_cfr -= compVal.iloc[0, 1]
 
 				if combtotal_cfr != 0:
-					numbyden = float(row['combtotal_def'])/combtotal_cfr
+					covern = float(combtotal_def)/combtotal_cfr
 
-				if numbyden - self.target < 0.01:
-					self.fdf = self.fdf.append(
+				if covern - self.target < 0.01:
+					self.fdf_temp = self.fdf_temp.append(
 								{'combfmlyid': list(cc), 
-								'scebdt': key, 
+								'scenario_dt': key, 
 								'combtotal_def': combtotal_def,
 								'combtotal_cfr': combtotal_cfr}, ignore_index=True)
 
-				if len(self.fdf.index) >= 5:
+				if len(self.fdf_temp) >= 5:
+					self.fdf = self.fdf.append(fdf_temp)
+					fdf_temp.drop(fdf_temp.index, inplace=True)
 					break
 		except Exception as e:
 			logging.error("newGetCombinations(), e: {}".format(e))
@@ -110,7 +134,7 @@ class ComboMaster(object):
 			for cc in genObj:
 				for c in cc:
 					compVal = self.df1.loc[
-								(self.df1['scebdt'] == key) & 
+								(self.df1['scenario_dt'] == key) & 
 								(self.df1['fmly_id'] == c), 
 								'def']
 					if compVal.empty:
@@ -119,7 +143,7 @@ class ComboMaster(object):
 				
 				self.fdf = self.fdf.append(
 								{'combfmlyid': list(cc), 
-								'scebdt': key, 
+								'scenario_dt': key, 
 								'combtotal': combtotal}, ignore_index=True)
 
 		except Exception as e:
@@ -130,13 +154,13 @@ class ComboMaster(object):
 		''' function to create combination all fmly_id uniquely '''
 
 		try:
-			self.fdf = pd.DataFrame(columns=['combfmlyid', 'scebdt', 'combtotal'])
+			self.fdf = pd.DataFrame(columns=['fmly_comb', 'scenario_dt', 'combtotal_def', 'combtotal_cfr'])
+			self.fdf_comb = pd.DataFrame(columns=['fmly_comb'])
 			self.reducedDF = pd.DataFrame(columns=['combfmlyid', 'scenarioDate', 'cover1', 'calcVal'])
-			
-			
+						
 			for key in self.fmlyDict.keys():
-				keyCounts = self.getReducedFmlyIds(self.fmlyDict[key], key)
-				self.newGetCombinations(self.fmlyDict[key], key, keyCounts)
+				keyCounts = self.getReducedFmlyIds(self.fmlyDict[key], key, self.df1	)
+				self.newGetCombinations(self.fmlyDict[key], key, keyCounts + 1)
 
 			## generate numerator/denomenator
 			self.generateNumbyDen()
@@ -146,8 +170,8 @@ class ComboMaster(object):
 			self.fdf['comblen'] = self.comblen
 
 			#print self.fdf
-			#finalDf =  self.fdf.loc[(self.fdf['numbyden'] != 'na') & (self.fdf['combfilter'] != 'na'), ['combfmlyid', 'scebdt', 'numbyden']]
-			finalDf =  self.fdf.loc[(self.fdf['numbyden'] != 'na'), ['combfmlyid', 'scebdt', 'numbyden', 'comblen']]
+			#finalDf =  self.fdf.loc[(self.fdf['numbyden'] != 'na') & (self.fdf['combfilter'] != 'na'), ['combfmlyid', 'scenario_dt', 'numbyden']]
+			finalDf =  self.fdf.loc[(self.fdf['numbyden'] != 'na'), ['combfmlyid', 'scenario_dt', 'numbyden', 'comblen']]
 			#print finalDf
 			
 			self.generateMinComb(finalDf)
@@ -156,53 +180,39 @@ class ComboMaster(object):
 			logging.error("createCombination(), e: {}".format(e))
 
 
-	def getReducedFmlyIds(self, fmlyIds, sdate):
+	def getReducedFmlyIds(self, fmlyIds, scen_date):
 		try:
 			tfid = []
+			df1_tmp = pd.DataFrame()
+			df1_tmp = self.df1.copy(deep=True)
 			total_cfr = self.df2['fmlycfr'].sum()
-			
-			for fid in fmlyIds:
-				cover = 0
-				numer = 0
-				denom = total_cfr
-				tfid.append(fid)
 
-				for index, row in self.df1.iterrows():
-					if fid == row['fmly_id']:
-						cover = row['cover1']
-				
-				for i in tfid:
-					numer += self.df1.loc[self.df1['fmly_id'] == i, 'def'].iloc[0]
-					denom -= self.df2.loc[self.df2['fmly_id'] == i, 'fmlycfr'].iloc[0]
-
-				if denom != 0:
-					numbyden = float(numer)/denom
-
-				self.reducedDF = self.reducedDF.append(
-										{'combfmlyid': tuple(tfid), 
-										'scenarioDate': sdate, 
-										'cover1': cover,
-										'calcVal': numbyden}, ignore_index=True)
-			
-			#print self.reducedDF
-			for indx, r in self.reducedDF.iterrows():
-				if self.target >= r['calcVal']:
-					self.keyCounts = len(r['combfmlyid'])
-
-			#print "keyCounts: ", self.keyCounts
-			return self.keyCounts
+			gd = self.df1.groupby('scen_date')
+			for name, group in gd:
+				if name == scen_date:
+					df1_tmp['comb_def'] = gd.get_group(scen_date)['defcny_no_offset'].transform(pd.series.cumsum)
+					df1_tmp['comb_cfr'] = total_cfr - gd.get_group(scen_date)['fmly_cfr'].transform(pd.series.cumsum)
+					df1_tmp['calc_val'] = df1_tmp['comb_def']/df1_tmp['comb_cfr']
+					df1_tmp.dropna(inplace=True)
+					df1_tmp = df1_tmp.reset_index()
+					break
+		
+			if df1_tmp['calc_val'].max() > self.target:
+				return df1_tmp[df1_tmp.calc_val > self.target].index[0]
+			else:
+				return 0
 		except Exception as e:
 			logging.error("getReducedFmlyIds(), e: {}".format(e))
 
 
 	def generateMinComb(self, finalDf):
 		try:
-			grouped = finalDf.groupby('scebdt')
+			grouped = finalDf.groupby('scenario_dt')
 			for name, group in grouped:
-				combMinDF = pd.DataFrame(columns=['combfmlyid', 'scebdt', 'numbyden', 'comblen'])
+				combMinDF = pd.DataFrame(columns=['combfmlyid', 'scenario_dt', 'numbyden', 'comblen'])
 				for index, row in finalDf.iterrows():
-					if row['scebdt'] == name:
-						combMinDF = combMinDF.append({'combfmlyid': row['combfmlyid'], 'scebdt': row['scebdt'], 'numbyden': row['numbyden'], 'comblen': row['comblen']}, ignore_index=True)
+					if row['scenario_dt'] == name:
+						combMinDF = combMinDF.append({'combfmlyid': row['combfmlyid'], 'scenario_dt': row['scenario_dt'], 'numbyden': row['numbyden'], 'comblen': row['comblen']}, ignore_index=True)
 				
 				gd = combMinDF.groupby('comblen')
 				cnt = 0
@@ -211,7 +221,7 @@ class ComboMaster(object):
 					minn = g.min()['numbyden']
 					for i, r in finalDf.iterrows():
 						if r['numbyden'] == minn:
-							self.finalCombMinDF = self.finalCombMinDF.append({'combfmlyid': r['combfmlyid'], 'scebdt': r['scebdt'], 'numbyden': r['numbyden']}, ignore_index=True)
+							self.finalCombMinDF = self.finalCombMinDF.append({'combfmlyid': r['combfmlyid'], 'scenario_dt': r['scenario_dt'], 'numbyden': r['numbyden']}, ignore_index=True)
 					cnt += 1
 					if cnt == 1:
 						break
@@ -292,7 +302,7 @@ class ComboMaster(object):
 		stime = time.time()
 		self.getargs()
 		self.readData()
-		self.createCombination()
+		#self.createCombination()
 		etime = time.time()
 		ttime = etime - stime		
 		logging.info("********************************************************")
