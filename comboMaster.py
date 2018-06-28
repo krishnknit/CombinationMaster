@@ -291,6 +291,27 @@ class ComboMaster(object):
 		return con, cursor
 
 
+	def createDataToExcel(self):
+		self.stored_df = stored_df # get dataframe by running the stored procedure
+		result = pd.merge(self.stored_df, self.fdf, on='bus_dt')
+		result['covernfromother'] = result.apply (lambda row: row.total_covern - row.covern_multipledef, axis=1)
+		result = result.reindex(columns=['bus_dt', 'scenario_dt', 'fmly_comb', 'total_covern', 'covern_multipledef', 'covernfromother', 'shk', 'mpler'])
+		
+		logging.info("creating excel file ...")
+		excelFile = os.path.join(os.getcwd(), 'excel_report.xlsx')
+
+		try:
+			writer = pd.ExcelWriter(excelFile, engine='xlsxwriter')
+			result.to_excel(writer, sheet_name='final df', index=False)
+			self.stored_df.to_excel(writer, sheet_name='stored df', index=False)
+			self.fdf.to_excel(writer, sheet_name='fdf', index=False)
+			writer.save()
+		except Exception as e:
+			logging.error("createDataToExcel(): unable to write excel file, e: {}".format(e))
+		else:
+			logging.info("excel file: {} has created ...".format(excelFile))
+
+
 	def main(self):
 		logging.basicConfig(filename=os.path.join(os.getcwd(), 'comboMaster.log'),
 							format='%(asctime)s: %(levelname)s: %(message)s',
@@ -303,6 +324,7 @@ class ComboMaster(object):
 		self.getargs()
 		self.readData()
 		#self.createCombination()
+		self.createDataToExcel()
 		etime = time.time()
 		ttime = etime - stime		
 		logging.info("********************************************************")
