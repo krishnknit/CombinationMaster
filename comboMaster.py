@@ -312,6 +312,21 @@ class ComboMaster(object):
 			logging.info("excel file: {} has created ...".format(excelFile))
 
 
+
+	def writeData_conn(self):
+		params = urllib.parse.quote_plus(conn_str)
+		engine = create_engine("mssql+pyodbc://?odbc_connect=%s" % params)
+		conn = engine.connect()
+		try:
+			res = conn.execute("select count(*) from gsd_scenario_famly where bus_dt between '{}' and '{}'".format(start_dt, end_dt))
+			if res:
+				conn.execute("DELETE from gsd_scenario_famly where bus_dt between '{}' and '{}'".format(start_dt, end_dt))
+
+			self.df_table_insert.to_sql(name='gsd_scenario_famly', con=conn, schema='dbo', if_exists='append', index=False)
+		except Exception as e:
+			logging.error("writeData_conn(): insertion failed, e: {}".format(e))
+
+
 	def main(self):
 		logging.basicConfig(filename=os.path.join(os.getcwd(), 'comboMaster.log'),
 							format='%(asctime)s: %(levelname)s: %(message)s',
