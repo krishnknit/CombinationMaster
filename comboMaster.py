@@ -179,13 +179,13 @@ class ComboMaster(object):
 					df1_tmp['comb_def'] = gd.get_group(scen_date)['defcny_no_offset'].transform(pd.series.cumsum)
 					df1_tmp['comb_cfr'] = total_cfr - gd.get_group(scen_date)['fmly_cfr'].transform(pd.series.cumsum)
 					df1_tmp['calc_val'] = df1_tmp['comb_def']/df1_tmp['comb_cfr']
-					df1_tmp['comb_fml'] = gd.get_group(scen_date)['fmly_id'].apply(lambda x: str(x) + ' ')cumsum()
+					df1_tmp['comb_fml'] = gd.get_group(scen_date)['fmly_id'].apply(lambda x: str(x) + ' ').cumsum()
 					df1_tmp.dropna(inplace=True)
 					df1_tmp = df1_tmp.reset_index()
 					break
 		
 			if df1_tmp['calc_val'].max() > self.target:
-				fmlid = df1_tmp[df1_tmp.calc_val > self.target]['comb_fml'].values.split(' ')
+				fmlid = df1_tmp[df1_tmp.calc_val > self.target]['comb_fml'].values[-1].strip().split(' ')
 				fmllength = df1_tmp[df1_tmp.calc_val > self.target].index[0]
 				return fmllength, fmlid, scen_date
 			else:
