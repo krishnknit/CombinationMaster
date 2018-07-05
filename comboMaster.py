@@ -10,6 +10,7 @@ import logging
 import argparse
 import datetime
 import threading
+import getopt
 import pandas as pd
 import numpy as np
 from itertools import combinations
@@ -44,11 +45,26 @@ class ComboMaster(object):
 	def getargs(self):
 		''' Read passed command line arguments '''
 
-		if len (sys.argv) != 2 :
-			print ("Usage: python <SCRIPT_NAME> <TARGET> ")
-			sys.exit (1)
-		else:
-			self.target = sys.argv[1]
+		parser = argparse.ArgumentParser()
+		parser.add_argument( '--sdate', '-s', type=str, required=True, help='start date')
+		parser.add_argument('--edate', '-e', type=str, required=True, help='end date')
+		parser.add_argument('--target', '-t', type=float, required=True, help='target')
+		parser.add_argument('--finaltarget', '-f', type=float, required=True, help='final target')
+
+		args = parser.parse_args()
+
+		if args.target > 1:
+		    print ("target should not greater than 1")
+
+		if args.ftarget > 1:
+		    print ("target should not greater than 1")
+
+
+		# if len (sys.argv) != 2 :
+		# 	print ("Usage: python <SCRIPT_NAME> <TARGET> ")
+		# 	sys.exit (1)
+		# else:
+		# 	self.target = sys.argv[1]
 
 
 	def readData(self):
@@ -359,7 +375,7 @@ class ComboMaster(object):
 		logging.info("starting combo master process ...")
 		logging.info("********************************************************")
 		stime = time.time()
-		#self.getargs()
+		self.getargs()
 		self.gatherData()
 		for index,row in self.fdf_display.iterrows():
 			for id in row['fmly_comb']:
